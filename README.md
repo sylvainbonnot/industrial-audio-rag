@@ -7,40 +7,39 @@ It doubles as a portfolio piece that highlights: advanced signal processing, fas
 
 ---
 
-## 🌟 Why this project matters
-
-Industrial datasets are rarely text‑centric. By combining **numeric feature extraction** (RMS, FFT peaks) with a language model, we let maintenance teams query raw sensor streams in plain English:
+##  What is this about
+When you are faced with a large dataset made of texts, LLMs and RAG techniques represent a clear choice of techniques. 
+However industrial datasets are rarely based on texts. You might land with a bunch of sensor recordings, may be wav files (coming from arrays of microphones) or accelerometer data. By combining **numeric feature extraction** (RMS, FFT peaks) with a language model, we can give the possibility to a maintenance team to directly query raw sensor streams in plain English:
 
 > *“Which anomalous bearing clips in section 00 had a dominant frequency above 900 Hz?”*
 
-The assistant surfaces file paths, stats, and reasoning—all without dashboards or SQL.
 
 ---
 
-## 🛠️ Architecture at a glance
+## Architecture 
 
 ```mermaid
 flowchart LR
     subgraph Offline Indexer
-        A[WAV files] -->|torch+numpy| B[Feature Extractor]\n(RMS / FFT)
-        B --> C[SentenceTransformer\nembedder]
+        A[WAV files]-->|torch+numpy|B
+        B[Feature Extractor RMS/FFT] --> C[SentenceTransformer embedder]
         C -->|vectors + JSON| D[Qdrant]
     end
 
     subgraph Online API
-        E[User ➜ /ask?q=…] --> F[Retriever\n(Qdrant top‑k)]
-        F --> G[LLM (Ollama)]
+        E[User ➜ /ask?q=…]--> F[Retriever Qdrant top k]
+        F --> G[LLM Ollama]
         G --> H[FastAPI response]
     end
 ```
 
-* ⚙️ **Indexer script:** `dcase_indexer.py` (runs once; \~3 min on M1).
-* 🌐 **API service:** `rag_api.py` (<40 LOC).
-* 💾 **Snapshots:** one command restores the full collection in seconds.
+* **Indexer script:** `dcase_indexer.py` (runs once; \~3 min on M1).
+* **API service:** `rag_api.py` (<40 LOC).
+* **Snapshots:** one command restores the full collection in seconds.
 
 ---
 
-## 🚀 Quick‑start
+## Quick‑start
 
 ```bash
 # 1. Clone repo & install env
@@ -62,7 +61,7 @@ Open [http://localhost:8000/docs](http://localhost:8000/docs) to try the `/ask` 
 
 ---
 
-## ✨ Example queries
+## Example queries you can try
 
 | Query                                                                          | Sample answer                                                               |
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
@@ -72,7 +71,7 @@ Open [http://localhost:8000/docs](http://localhost:8000/docs) to try the `/ask` 
 
 ---
 
-## 🧩 Core code snippets
+## Core code snippets
 
 ```python
 # feature extraction (simplified)
@@ -97,28 +96,6 @@ async def ask(q: str):
 
 ---
 
-## 📦 Results & next steps
-
-* **Index size:** 58 k vectors, 350 MB on disk.
-* **Query latency:** \~120 ms retrieval + \~900 ms LLM (Mistral‑7B‑int4).
-* **Accuracy boost:** +22 pp vs. heuristic dashboard on bearing‑fault case study.
-
-Future improvements:
-
-1. Fine‑tune a small audio‑text model for better embeddings.
-2. Streamlit or HTMX front‑end with spectrogram rendering.
-3. Batch evaluation harness with `llm‑eval‑harness` to track answer quality.
-
----
-
-## 🤝 Credits
-
-Dataset © DCASE 2024 Task 2 (CC‑BY‑NC‑SA 4.0).
-Vector search by **Qdrant**, embeddings by **mixedbread‑ai**, local LLM via **Ollama**.
-
----
-
-*Made by Sylvain Bonnot — Lead DS | Industrial AI & LLMs*
 # industrial-audio-rag extra instructions
 
 ## First run?
@@ -135,10 +112,16 @@ Vector search by **Qdrant**, embeddings by **mixedbread‑ai**, local LLM via **
 
 ## Second run
 Replace steps 2-4 by:
+
+```bash
 docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:v1.8.1
 docker cp /path/to/dcase24_bearing.snapshot \
           qdrant:/qdrant/snapshots/dcase24_bearing/
-python - <<'PY'
+```
+
+then run this python script:
+
+```python
 from qdrant_client import QdrantClient
 client = QdrantClient(url="http://localhost:6333")
 client.restore_snapshot(
@@ -146,8 +129,11 @@ client.restore_snapshot(
     snapshot_path="/qdrant/snapshots/dcase24_bearing/dcase24_bearing.snapshot",
     wait=True,
 )
-PY
+```
 
-Then continue with:
+And finally:
+
+```bash
 uvicorn rag_audio.api:app --reload      # serve
 curl "http://localhost:8000/ask?q=..."  # query
+```

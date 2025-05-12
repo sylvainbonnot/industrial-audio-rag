@@ -27,8 +27,11 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 # Logging & CLI
 # ---------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 def _cli() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build Qdrant collection from DCASE WAVs")
@@ -39,10 +42,12 @@ def _cli() -> argparse.Namespace:
     p.add_argument("--batch", type=int, default=64)
     return p.parse_args()
 
+
 # ---------------------------------------------------------------------------
 # Audio helpers
 # ---------------------------------------------------------------------------
 _torch_backend_set = False
+
 
 def safe_load(path: Path):
     """Load WAV with torchaudio, fall back to scipy when codec unsupported."""
@@ -60,17 +65,24 @@ def safe_load(path: Path):
         data = torch.from_numpy(data).unsqueeze(0)
         return data, sr
 
+
 def compute_features(sig: torch.Tensor, sr: int) -> Dict[str, float]:
-    rms = float(torch.sqrt(torch.mean(sig ** 2)))
+    rms = float(torch.sqrt(torch.mean(sig**2)))
     fft_n = min(4096, sig.shape[-1])
     fft = torch.fft.rfft(sig, n=fft_n)
     mag = torch.abs(fft)
     freqs = torch.fft.rfftfreq(fft_n, d=1 / sr)
     dominant = float(freqs[mag.argmax()])
-    power = float(torch.mean(sig ** 2))
+    power = float(torch.mean(sig**2))
     noise = float(torch.var(sig - sig.mean()))
     snr = 10 * math.log10(power / (noise + 1e-12))
-    return {"rms": rms, "dominant_freq_hz": dominant, "snr_db": snr, "duration_sec": sig.shape[-1] / sr}
+    return {
+        "rms": rms,
+        "dominant_freq_hz": dominant,
+        "snr_db": snr,
+        "duration_sec": sig.shape[-1] / sr,
+    }
+
 
 def parse_filename(path: Path) -> Dict[str, str]:
     parts = path.stem.split("_")
@@ -83,6 +95,7 @@ def parse_filename(path: Path) -> Dict[str, str]:
         "clip_id": parts[5] if len(parts) > 5 else path.stem,
     }
 
+
 def _process_file(path: Path, embedder: SentenceTransformer):
     meta = parse_filename(path)
     sig, sr = safe_load(path)
@@ -90,21 +103,29 @@ def _process_file(path: Path, embedder: SentenceTransformer):
     payload = {**meta, **feats, "file": str(path)}
     text = json.dumps(payload, separators=(",", ":"))
     vec = embedder.encode(text)
-    return qdrant.PointStruct(id=str(uuid.uuid4()), vector=vec.tolist(), payload=payload)
+    return qdrant.PointStruct(
+        id=str(uuid.uuid4()), vector=vec.tolist(), payload=payload
+    )
+
 
 # ---------------------------------------------------------------------------
 # Main index routine
 # ---------------------------------------------------------------------------
 
-def build_index(data_dir: Path, collection: str, model: str, qdrant_url: str, batch: int):
+
+def build_index(
+    data_dir: Path, collection: str, model: str, qdrant_url: str, batch: int
+):
     client = QdrantClient(url=qdrant_url)
     embedder = SentenceTransformer(model)
 
     if collection not in [c.name for c in client.get_collections().collections]:
         client.recreate_collection(
             collection_name=collection,
-            vectors_config=qdrant.VectorParams(size=embedder.get_sentence_embedding_dimension(),
-                                              distance=qdrant.Distance.COSINE),
+            vectors_config=qdrant.VectorParams(
+                size=embedder.get_sentence_embedding_dimension(),
+                distance=qdrant.Distance.COSINE,
+            ),
         )
         logger.info("Created collection %s", collection)
 
@@ -124,6 +145,7 @@ def build_index(data_dir: Path, collection: str, model: str, qdrant_url: str, ba
     if batch_points:
         client.upsert(collection_name=collection, points=batch_points)
     logger.info("Indexing complete ✅ (%d files)", len(wavs))
+
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
