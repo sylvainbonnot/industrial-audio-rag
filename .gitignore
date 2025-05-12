@@ -1,0 +1,10 @@
+# data & artefacts
+Data/
+snapshots/
+*.snapshot
+
+# Python / env
+*.pyc
+__pycache__/
+.env
+.venv
