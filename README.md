@@ -1,3 +1,5 @@
+![Industrial Audio RAG Banner](docs/images/banner.png)
+
 # GitHub Sample Post - RAG Assistant for Industrial Audio
 
 > **Project tagline:** *Ask natural‑language questions about factory machine sounds.*
