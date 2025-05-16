@@ -93,7 +93,6 @@ The quickstart instructions cover the situation where you run the pipeline for t
 | 5 | `uvicorn rag_audio.api:app --reload`                                                                                                           | Launches FastAPI on [http://localhost:8000](http://localhost:8000)  |
 | 6 | Open [http://localhost:8000/docs](http://localhost:8000/docs) to try the `/ask` endpoint | Test query → JSON answer                                            |
 
-Open [http://localhost:8000/docs](http://localhost:8000/docs) to try the `/ask` endpoint.
 
 ---
 
@@ -133,14 +132,10 @@ async def ask(q: str):
 ---
 
 # industrial-audio-rag extra instructions
-
-## First run?
-
-
-
+In this section I assume you already tried the entire pipeline. In particular the indexing has already been done. You have saved a snapshot of the Qdrant collection somewhere.
 
 ## Second run
-Replace steps 2-4 by:
+Replace steps 2-4 of the quick-install by:
 
 ```bash
 docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:v1.8.1
