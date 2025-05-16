@@ -1,0 +1,17 @@
+torch
+torchaudio
+qdrant-client
+sentence-transformers
+fastapi
+uvicorn
+numpy
+scipy
+tqdm
+
+[dev]
+pytest
+ruff
+mypy
+types-requests
+httpx
+pytest-cov

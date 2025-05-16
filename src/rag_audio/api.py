@@ -1,5 +1,6 @@
 # src/rag_audio/api.py
-"""FastAPI service exposing /ask and /info endpoints for the indexed audio vectors.
+"""
+FastAPI service exposing /ask and /info endpoints for the indexed audio vectors.
 
 Start with:
 
@@ -13,28 +14,32 @@ Environment variables (with defaults):
     OLLAMA_MODEL      mistral
     SEARCH_LIMIT      6
 """
+
 from __future__ import annotations
 
 import json
 import os
+import requests
+from typing import Any, Optional, List, Dict, Callable
 
 from fastapi import FastAPI, Query
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
+from qdrant_client.http.models import PointStruct
 
-# Optional Ollama client
+
+# Try importing ollama; fallback to requests-based client if not available
 try:
     from ollama import Client as OllamaClient  # type: ignore
 
-    def _llm_chat(prompt: str, model: str, host: str):
+    def _llm_chat(prompt: str, model: str, host: str) -> str:
         oc = OllamaClient(host=host)
         res = oc.chat(model=model, messages=[{"role": "user", "content": prompt}])
         return res["message"]["content"]
 
 except ImportError:
-    import requests
 
-    def _llm_chat(prompt: str, model: str, host: str):  # type: ignore
+    def _llm_chat(prompt: str, model: str, host: str) -> str:
         r = requests.post(
             f"{host}/api/generate",
             json={"model": model, "prompt": prompt, "stream": False},
@@ -45,30 +50,45 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-COLLECTION = os.getenv("COLLECTION", "dcase24_bearing")
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "mixedbread-ai/mxbai-embed-large-v1")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
-SEARCH_LIMIT = int(os.getenv("SEARCH_LIMIT", "6"))
+# Environment Variables with default values
+COLLECTION: str = os.getenv("COLLECTION", "dcase24_bearing")
+QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
+EMBED_MODEL: str = os.getenv("EMBED_MODEL", "mixedbread-ai/mxbai-embed-large-v1")
+OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral")
+SEARCH_LIMIT: int = int(os.getenv("SEARCH_LIMIT", "6"))
 
+
+# Initialize clients
 client = QdrantClient(url=QDRANT_URL)
 embedder = SentenceTransformer(EMBED_MODEL)
 
 app = FastAPI(title="Industrial‑Audio RAG API")
 
+
 # ---------------------------------------------------------------------------
 
 
-def _rag_answer(question: str):
-    vec = embedder.encode(question)
+def _rag_answer(question: str) -> str:
+    """
+    Generate an answer using RAG over industrial audio logs.
+
+    Args:
+        question (str): Natural language query about machine sounds
+
+    Returns:
+        str: LLM-generated answer based on retrieved snippets
+    """
+    vec: List[float] = embedder.encode(question).tolist()
     hits = client.search(
         collection_name=COLLECTION, query_vector=vec, limit=SEARCH_LIMIT
     )
+
     if not hits:
         return "No matching audio snippets found."
-    context = "\n".join(json.dumps(h.payload) for h in hits)
-    prompt = (
+
+    context: str = "\n".join(json.dumps(h.payload) for h in hits)
+    prompt: str = (
         "You are an industrial‑AI assistant. Use only the sensor snippets below.\n\n"
         f"CONTEXT:\n{context}\n\nQUESTION: {question}\n"
     )
@@ -81,12 +101,26 @@ async def root():
 
 
 @app.get("/ask")
-async def ask(q: str = Query(..., description="Natural‑language question")):
+async def ask(
+    q: str = Query(..., description="Natural-language question")
+) -> dict[str, Any]:
+    """
+    Ask a natural-language question about industrial audio data.
+
+    Returns:
+        dict: Question + generated answer
+    """
     return {"question": q, "answer": _rag_answer(q)}
 
 
 @app.get("/info")
-async def info():
+async def info() -> dict[str, Any]:
+    """
+    Return metadata about the current RAG setup.
+
+    Returns:
+        dict: Info including vector count, models used, etc.
+    """
     count = client.count(collection_name=COLLECTION).count
     return {
         "collection": COLLECTION,
