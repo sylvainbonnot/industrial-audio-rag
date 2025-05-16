@@ -81,23 +81,17 @@ Qdrant's search API returns the most relevant points. The LLM now receveives the
 
 ---
 
-## Quick‑start
+## Quick‑start and install
+The quickstart instructions cover the situation where you run the pipeline for the first time. The indexing operations take quite a bit of time, so there are further instructions at the bottom of the page to re-use the snapshots created. 
 
-```bash
-# 1. Clone repo & install env
-conda env create -f env.yml
-conda activate ml_py310
-
-# 2. Download dataset (≈2.2 GB) → Data/Dcase
-bash scripts/get_dcase24.sh
-
-# 3. Index vectors (one‑off)
-python dcase_indexer.py --data Data/Dcase
-
-# 4. Run Qdrant + API
-docker compose up -d qdrant
-uvicorn rag_api:app --reload
-```
+| # | Command (from repo root)                                                                                                                       | What it does                                                        |
+| - | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1 | `conda env create -f env.yml && conda activate ml_py310`                                                                                       | Creates + activates the Python 3.10 env                             |
+| 2 | `bash scripts/get_dcase24.sh`                                                                                                                  | Downloads & unzips the DCASE-24 dev set (≈ 2 GB) into `Data/Dcase/` |
+| 3 | `docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:v1.8.1`                                                                                | Starts Qdrant vector DB                                             |
+| 4 | `python -m rag_audio.indexer --data Data/Dcase`                                                                                                | Extracts features → embeds → upserts (≈ 3 min CPU)                  |
+| 5 | `uvicorn rag_audio.api:app --reload`                                                                                                           | Launches FastAPI on [http://localhost:8000](http://localhost:8000)  |
+| 6 | Open [http://localhost:8000/docs](http://localhost:8000/docs) to try the `/ask` endpoint | Test query → JSON answer                                            |
 
 Open [http://localhost:8000/docs](http://localhost:8000/docs) to try the `/ask` endpoint.
 
@@ -142,14 +136,7 @@ async def ask(q: str):
 
 ## First run?
 
-| # | Command (from repo root)                                                                                                                       | What it does                                                        |
-| - | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| 1 | `conda env create -f env.yml && conda activate ml_py310`                                                                                       | Creates + activates the Python 3.10 env                             |
-| 2 | `bash scripts/get_dcase24.sh`                                                                                                                  | Downloads & unzips the DCASE-24 dev set (≈ 2 GB) into `Data/Dcase/` |
-| 3 | `docker run -d --name qdrant -p 6333:6333 qdrant/qdrant:v1.8.1`                                                                                | Starts Qdrant vector DB                                             |
-| 4 | `python -m rag_audio.indexer --data Data/Dcase`                                                                                                | Extracts features → embeds → upserts (≈ 3 min CPU)                  |
-| 5 | `uvicorn rag_audio.api:app --reload`                                                                                                           | Launches FastAPI on [http://localhost:8000](http://localhost:8000)  |
-| 6 | `curl "http://localhost:8000/ask?q=Which%20anomalous%20bearing%20clips%20in%20section%2000%20have%20dominant%20frequency%20above%20900%20Hz?"` | Test query → JSON answer                                            |
+
 
 
 ## Second run
