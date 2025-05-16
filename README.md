@@ -39,10 +39,10 @@ The audio features constitute like a simplified **fingerprint** for the audio cl
 
 
 Technically what is stored inside Qdrant looks like this:
-```json
+```python
 {
   "id": "0d6fec7b-5a4d-4d87-9fd9-5c913a3c2d4f",
-  "vector": [ -0.027, 0.154, … -0.041 ],          // 1 024 floats
+  "vector": [ -0.027, 0.154, ..., -0.041 ],          // 1 024 floats
   "payload": {
     "machine_type": "bearing",
     "section": "01",
@@ -59,7 +59,7 @@ Technically what is stored inside Qdrant looks like this:
 }
 ```
 
-The **vector** part of this data corresponds to an embedding of the payload part. 
+The **vector** part of this data corresponds to an embedding of the payload part. It gives us access to a kind of "fuzzy search" ("find sounds similar to this one"): points that are close to each other in the embedding space correspond to similar objects. The **payload** part allows some convenient filtering (eg "get all bearings") that the vector part could not offer. The two aspects complement each other.
 
 ```mermaid
 flowchart LR
