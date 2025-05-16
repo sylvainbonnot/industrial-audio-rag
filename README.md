@@ -29,6 +29,16 @@ flowchart LR
         C -->|vectors + JSON| D[Qdrant]
 ```
 
+The audio features constitute like a simplified **fingerprint** for the audio clip. For the purpose of this project, we chose very simple ones, lightweight features, but one could easily imagine more refined choices.
+| Chose feature                                   | Why                                   |
+| ----------------------------------------- | -------------------------------------------- |
+| **RMS**                                   | overall loudness                             |
+| **Dominant freq (Hz)**                    | main mechanical resonance                    |
+| **SNR (dB)**                              | health proxy—faulty bearings are often noisy |
+| **Duration (s)**                          | catches truncated files                      |
+
+
+
 
 ```mermaid
 flowchart LR
