@@ -18,7 +18,16 @@ Industrial datasets are a whole different beast. They are rarely based on texts.
 
 > *“Which anomalous bearing clips in section 00 had a dominant frequency above 900 Hz?”*
 
+The features chosen here are quite simple. For the study of sounds, it is quite common to take a  specialized version of spectrograms, called **mel-spectrogram**. 
+Here is one such example: 
 
+![Mel-spectrogram](images/mfcc.png)
+
+## Visualizing the entire dataset
+
+If you want to have a global panorama of the entire dataset, you will have to make some choices. After all, visualizing means projecting to a flat 2d screen the entire dataset. One nice way to do that is to compute the mel-spectrograms for each sound snippet, obtain like this a set of large matrices (that you can view as vectors in a high dimensional space), and then project to the plane to visualize. The so-called **tsne** embedding is a common choice of such (nonlinear) projection. The result looks like this:
+
+![Tsne of dataset](images/tsne.png)
 ---
 
 ## Architecture and flow
