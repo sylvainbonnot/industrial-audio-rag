@@ -18,8 +18,9 @@ Industrial datasets are a whole different beast. They are rarely based on texts.
 
 ---
 
-## Architecture 
-
+## Architecture and flow
+In this DCase dataset we have 2024 thousands of one‑second WAV clips recorded from bearings, valves and other industrial machines.
+We want to make those audio clips instantly searchable, as if we had some kind of "Google for sounds" available to us. We want to be able to "find all files whose spectral stats & metadata resemble this noisy valve", without listening to them one by one each time we ask a question. The central piece is the script ```dcase_indexer.py```: basically it ingests the entire folder full of WAVs, computes some light‑weight audio features for each sound snippet, concatenates these features with filename metadata, embeds the result with a Sentence Transformer, and finally shelves the result nicely into a Qdrant collection.
 ```mermaid
 flowchart LR
     subgraph Offline Indexer
