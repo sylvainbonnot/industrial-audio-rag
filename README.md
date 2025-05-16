@@ -22,6 +22,7 @@ Industrial datasets are a whole different beast. They are rarely based on texts.
 In this DCase dataset we have 2024 thousands of one‑second WAV clips recorded from bearings, valves and other industrial machines.
 We want to make those audio clips instantly searchable, as if we had some kind of "Google for sounds" available to us. We want to be able to "find all files whose spectral stats & metadata resemble this noisy valve", without listening to them one by one each time we ask a question. The central piece is the script ```dcase_indexer.py```: basically it ingests the entire folder full of WAVs, computes some light‑weight audio features for each sound snippet, concatenates these features with filename metadata, embeds the result with a Sentence Transformer, and finally shelves the result nicely into a Qdrant collection.
 
+### Indexing the files
 ```mermaid
 flowchart LR
         A[WAV files]-->|torch+numpy|B
@@ -61,19 +62,15 @@ Technically what is stored inside Qdrant looks like this:
 
 The **vector** part of this data corresponds to an embedding of the payload part. It gives us access to a kind of "fuzzy search" ("find sounds similar to this one"): points that are close to each other in the embedding space correspond to similar objects. The **payload** part allows some convenient filtering (eg "get all bearings") that the vector part could not offer. The two aspects complement each other.
 
+### Querying
+
+Now let us say that the user wants to retrieve "bearing clip with loud 50 Hz hum”. The query is normalized into a json ```{"machine_type":"bearing","dominant_freq_hz":50,"rms":"high",...}``` and then sent to the embedder. 
 ```mermaid
 flowchart LR
-    subgraph Offline Indexer
-        A[WAV files]-->|torch+numpy|B
-        B[Feature Extractor RMS/FFT] --> C[SentenceTransformer embedder]
-        C -->|vectors + JSON| D[Qdrant]
-    end
-
-    subgraph Online API
         E[User ➜ /ask?q=…]--> F[Retriever Qdrant top k]
         F --> G[LLM Ollama]
         G --> H[FastAPI response]
-    end
+    
 ```
 
 * **Indexer script:** `dcase_indexer.py` (runs once; \~3 min on M1).
