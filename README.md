@@ -72,6 +72,8 @@ flowchart LR
         G --> H[FastAPI response]
     
 ```
+Qdrant's search API returns the most relevant points. The LLM now receveives the user’s original prompt together with the snippets (or feature tables) from the retrieved clips. It then returns its final answer. And that concludes the oevrview of the entire pipeline!
+
 
 * **Indexer script:** `dcase_indexer.py` (runs once; \~3 min on M1).
 * **API service:** `rag_api.py` (<40 LOC).
