@@ -5,13 +5,13 @@
 > **Project tagline:** *Ask natural‑language questions about factory machine sounds.*
 
 This walkthrough shows how to turn 2 GB of **DCASE 2024 Task‑2** audio logs into an interactive Retrieval‑Augmented‑Generation (RAG) service powered by an open‑source LLM and **Qdrant** vector search.
-It doubles as a portfolio piece that highlights: advanced signal processing, fast batch embedding, a production‑grade FastAPI backend, and snapshot‑based MLOps.
+Along the way we will some advanced signal processing, fast batch embedding techniques, and wrap the whole thing into a production‑grade FastAPI backend, together with snapshot‑based MLOps.
 
 ---
 
 ##  What is this about
-When you are faced with a large dataset made of texts, LLMs and RAG techniques represent a clear choice of techniques. 
-However industrial datasets are rarely based on texts. You might land with a bunch of sensor recordings, may be wav files (coming from arrays of microphones) or accelerometer data. By combining **numeric feature extraction** (RMS, FFT peaks) with a language model, we can give the possibility to a maintenance team to directly query raw sensor streams in plain English:
+When you are faced with a large dataset made of texts, LLMs and RAG techniques represent a clear choice of techniques. After all, LLMs are all about predicting what word comes next, after a given context.
+Industrial datasets are a whole different beast. They are rarely based on texts. For example, you might be faced with a bunch of sensor recordings. They could be wav files (coming from arrays of microphones) or accelerometer data. These continuous signals are actually not so far from texts: after all, once they enter the computer, the signals are discretized (think: streams of 0 and 1), so you could imagine that LLM might enter the scene and reason about these "texts" made of 0 and 1. In other words, you would work with LLMs directly on the raw signals. But you could do something different. By performing **numeric feature extraction** (RMS, FFT peaks), you could produce more meaningful streams of signals, and by combining them with a language model, you could directly query those raw sensor streams in plain English:
 
 > *“Which anomalous bearing clips in section 00 had a dominant frequency above 900 Hz?”*
 
