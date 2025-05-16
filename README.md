@@ -30,7 +30,7 @@ flowchart LR
 ```
 
 The audio features constitute like a simplified **fingerprint** for the audio clip. For the purpose of this project, we chose very simple ones, lightweight features, but one could easily imagine more refined choices.
-| Chose feature                                   | Why                                   |
+| Chosen feature                                   | Why                                   |
 | ----------------------------------------- | -------------------------------------------- |
 | **RMS**                                   | overall loudness                             |
 | **Dominant freq (Hz)**                    | main mechanical resonance                    |
@@ -38,7 +38,28 @@ The audio features constitute like a simplified **fingerprint** for the audio cl
 | **Duration (s)**                          | catches truncated files                      |
 
 
+Technically what is stored inside Qdrant looks like this:
+```json
+{
+  "id": "0d6fec7b-5a4d-4d87-9fd9-5c913a3c2d4f",
+  "vector": [ -0.027, 0.154, … -0.041 ],          // 1 024 floats
+  "payload": {
+    "machine_type": "bearing",
+    "section": "01",
+    "domain": "source",
+    "split": "train",
+    "state": "normal",
+    "clip_id": "000231",
+    "rms": 0.018,
+    "dominant_freq_hz": 49.8,
+    "snr_db": 32.4,
+    "duration_sec": 1.0,
+    "file": "Data/Dcase/bearing/…/bearing_01_source_train_normal_000231.wav"
+  }
+}
+```
 
+The **vector** part of this data corresponds to an embedding of the payload part. 
 
 ```mermaid
 flowchart LR
