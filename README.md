@@ -1,3 +1,6 @@
+[![CI](https://github.com/sylvainbonnot/industrial-audio-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/sylvainbonnot/industrial-audio-rag/actions/workflows/ci.yml)
+
+
 ![Industrial Audio RAG Banner](docs/images/banner.png)
 
 # RAG Assistant for Industrial Audio
