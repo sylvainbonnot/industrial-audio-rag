@@ -1,0 +1,231 @@
+# Default values for industrial-audio-rag
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# Application configuration
+app:
+  name: industrial-audio-rag
+  image:
+    registry: ghcr.io
+    repository: otosense/industrial-audio-rag
+    tag: ""  # Will use Chart.appVersion if empty
+    pullPolicy: IfNotPresent
+  
+  # Pod configuration
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  
+  # Auto scaling
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    readOnlyRootFilesystem: true
+  
+  # Environment variables
+  env:
+    # Qdrant configuration
+    QDRANT_URL: "http://qdrant:6333"
+    QDRANT_COLLECTION_NAME: "audio_embeddings"
+    
+    # Model configuration
+    EMBEDDING_MODEL_NAME: "sentence-transformers/all-MiniLM-L6-v2"
+    LLM_MODEL_NAME: "mistral:7b"
+    
+    # API configuration
+    ENABLE_API_KEY_AUTH: "true"
+    ENABLE_RATE_LIMITING: "true"
+    ENABLE_PII_DETECTION: "true"
+    ENABLE_METRICS: "true"
+    
+    # Performance settings
+    MAX_QUERY_LENGTH: "1000"
+    MAX_RESULTS: "10"
+    
+    # Monitoring
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: industrial-audio-rag.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: industrial-audio-rag-tls
+      hosts:
+        - industrial-audio-rag.example.com
+
+# Qdrant vector database
+qdrant:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: qdrant/qdrant
+    tag: "v1.7.4"
+    pullPolicy: IfNotPresent
+  
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+  
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+  
+  service:
+    type: ClusterIP
+    port: 6333
+
+# Ollama (optional for local LLM)
+ollama:
+  enabled: false
+  image:
+    registry: docker.io
+    repository: ollama/ollama
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClass: ""
+  
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+  
+  service:
+    type: ClusterIP
+    port: 11434
+
+# Monitoring stack
+monitoring:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 15s
+      path: /metrics
+    
+  grafana:
+    enabled: true
+    adminPassword: "admin123"  # Change in production
+    dashboards:
+      enabled: true
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Node selector and tolerations
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - industrial-audio-rag
+        topologyKey: kubernetes.io/hostname
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC
+rbac:
+  create: true
+
+# ConfigMaps and Secrets
+configMap:
+  create: true
+  data: {}
+
+secret:
+  create: true
+  data: {}
+
+# Init containers for data loading
+initContainers:
+  dataLoader:
+    enabled: false
+    image:
+      registry: ghcr.io
+      repository: otosense/industrial-audio-rag
+      tag: "data-loader"
+    command:
+      - python
+      - scripts/load_data.py
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi

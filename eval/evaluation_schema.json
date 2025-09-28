@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Industrial Audio RAG Evaluation Response Schema",
+  "description": "Schema for validating RAG responses in evaluation framework",
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string",
+      "description": "The original query question",
+      "minLength": 1
+    },
+    "answer": {
+      "type": "string",
+      "description": "The generated answer from the RAG system",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "processing_time_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Time taken to process the query"
+        },
+        "collection": {
+          "type": "string",
+          "description": "Vector collection used"
+        },
+        "embedding_model": {
+          "type": "string",
+          "description": "Model used for embeddings"
+        },
+        "llm_model": {
+          "type": "string",
+          "description": "Language model used for generation"
+        },
+        "sanitized": {
+          "type": "boolean",
+          "description": "Whether input was sanitized"
+        },
+        "security": {
+          "type": "object",
+          "properties": {
+            "authenticated": {
+              "type": "boolean",
+              "description": "Whether request was authenticated"
+            },
+            "rate_limited": {
+              "type": "boolean",
+              "description": "Whether rate limiting is active"
+            },
+            "pii_detection_enabled": {
+              "type": "boolean",
+              "description": "Whether PII detection is enabled"
+            }
+          },
+          "required": ["authenticated", "rate_limited", "pii_detection_enabled"]
+        }
+      },
+      "required": [
+        "processing_time_seconds",
+        "collection",
+        "embedding_model", 
+        "llm_model",
+        "sanitized",
+        "security"
+      ]
+    }
+  },
+  "required": ["question", "answer", "metadata"],
+  "additionalProperties": false
+}

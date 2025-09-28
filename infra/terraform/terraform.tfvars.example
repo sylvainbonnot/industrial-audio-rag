@@ -1,0 +1,46 @@
+# Example Terraform variables file
+# Copy this file to terraform.tfvars and customize for your environment
+
+# Basic Configuration
+aws_region   = "us-west-2"
+environment  = "dev"
+project_name = "industrial-audio-rag"
+
+# Network Configuration
+vpc_cidr        = "10.0.0.0/16"
+azs             = ["us-west-2a", "us-west-2b", "us-west-2c"]
+private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+
+# EKS Configuration
+cluster_version               = "1.28"
+node_group_instance_types     = ["t3.medium"]
+node_group_desired_capacity   = 2
+node_group_max_capacity       = 5
+node_group_min_capacity       = 1
+
+# Cost Optimization
+enable_spot_instances = false
+spot_instance_types   = ["t3.medium", "t3.large", "m5.large"]
+
+# Application Configuration
+enable_qdrant_persistence = true
+qdrant_storage_size      = 100
+enable_monitoring        = true
+enable_ingress_controller = true
+
+# Domain and SSL (optional)
+domain_name     = ""  # e.g., "myapp.example.com"
+certificate_arn = ""  # ACM certificate ARN for HTTPS
+
+# Security
+allowed_cidr_blocks = ["0.0.0.0/0"]  # Restrict this in production
+enable_encryption   = true
+
+# Backup
+backup_retention_days = 7
+backup_schedule      = "0 2 * * *"  # Daily at 2 AM
+
+# Monitoring
+log_retention_days        = 30
+enable_container_insights = true

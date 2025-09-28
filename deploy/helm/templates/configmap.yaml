@@ -1,0 +1,18 @@
+{{- if .Values.configMap.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "industrial-audio-rag.fullname" . }}-config
+  labels:
+    {{- include "industrial-audio-rag.labels" . | nindent 4 }}
+data:
+  # Application configuration
+  {{- range $key, $value := .Values.app.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  
+  # Additional configuration data
+  {{- range $key, $value := .Values.configMap.data }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}

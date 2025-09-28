@@ -1,0 +1,18 @@
+apiVersion: v2
+name: industrial-audio-rag
+description: A Helm chart for Industrial Audio RAG system
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - rag
+  - audio
+  - ai
+  - fastapi
+  - qdrant
+home: https://github.com/otosense/industrial-audio-rag
+sources:
+  - https://github.com/otosense/industrial-audio-rag
+maintainers:
+  - name: Industrial Audio RAG Team
+    email: team@example.com

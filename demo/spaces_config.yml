@@ -1,0 +1,23 @@
+title: Industrial Audio RAG System
+emoji: 🏭
+colorFrom: blue
+colorTo: purple
+sdk: gradio
+sdk_version: 4.7.1
+app_file: app.py
+pinned: false
+license: mit
+short_description: AI-powered Q&A system for industrial audio analysis using RAG
+tags:
+- audio
+- industrial
+- rag
+- machine-learning
+- anomaly-detection
+- bearing-analysis
+- gradio
+- fastapi
+models:
+- sentence-transformers/all-MiniLM-L6-v2
+datasets:
+- DCASE2024-Task2
