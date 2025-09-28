@@ -26,6 +26,7 @@ from typing import Any, Optional, List, Dict, Callable
 
 from fastapi import FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import PointStruct
@@ -47,6 +48,27 @@ try:
 except ImportError:
     OTEL_AVAILABLE = False
     logging.warning("OpenTelemetry not available. Monitoring will be limited to Prometheus metrics.")
+
+# Security imports
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import HTTPException, Depends, status
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+import bleach
+import re
+from typing import Union
+
+# PII Detection imports
+try:
+    from presidio_analyzer import AnalyzerEngine
+    from presidio_anonymizer import AnonymizerEngine
+    PII_DETECTION_AVAILABLE = True
+except ImportError:
+    PII_DETECTION_AVAILABLE = False
+    logging.warning("Presidio not available. PII detection will be disabled.")
 
 
 # Try importing ollama; fallback to requests-based client if not available
@@ -82,6 +104,16 @@ SEARCH_LIMIT: int = int(os.getenv("SEARCH_LIMIT", "6"))
 # Monitoring configuration
 METRICS_ENABLED: bool = os.getenv("METRICS_ENABLED", "true").lower() == "true"
 JAEGER_ENDPOINT: str = os.getenv("JAEGER_ENDPOINT", "http://localhost:14268/api/traces")
+
+# Security configuration
+API_KEY: str = os.getenv("API_KEY", "")
+JWT_SECRET_KEY: str = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+JWT_ALGORITHM: str = "HS256"
+JWT_EXPIRATION_HOURS: int = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
+RATE_LIMIT_PER_MINUTE: str = os.getenv("RATE_LIMIT", "10/minute")
+ENABLE_API_KEY_AUTH: bool = os.getenv("ENABLE_API_KEY_AUTH", "false").lower() == "true"
+ENABLE_PII_DETECTION: bool = os.getenv("ENABLE_PII_DETECTION", "true").lower() == "true"
+MAX_QUERY_LENGTH: int = int(os.getenv("MAX_QUERY_LENGTH", "1000"))
 
 # ---------------------------------------------------------------------------
 # Prometheus Metrics
@@ -165,6 +197,31 @@ CACHE_MISSES = Counter(
     ['cache_type']
 )
 
+# Security metrics
+RATE_LIMIT_EXCEEDED = Counter(
+    'rate_limit_exceeded_total',
+    'Total rate limit violations',
+    ['endpoint', 'client_ip']
+)
+
+AUTH_FAILURES = Counter(
+    'auth_failures_total',
+    'Total authentication failures',
+    ['reason']
+)
+
+PII_DETECTIONS = Counter(
+    'pii_detections_total',
+    'Total PII detections and redactions',
+    ['pii_type']
+)
+
+BLOCKED_REQUESTS = Counter(
+    'blocked_requests_total',
+    'Total blocked requests',
+    ['reason']
+)
+
 # ---------------------------------------------------------------------------
 # OpenTelemetry Setup
 # ---------------------------------------------------------------------------
@@ -181,6 +238,104 @@ if OTEL_AVAILABLE and METRICS_ENABLED:
         )
         span_processor = BatchSpanProcessor(jaeger_exporter)
         trace.get_tracer_provider().add_span_processor(span_processor)
+
+# ---------------------------------------------------------------------------
+# Security Setup
+# ---------------------------------------------------------------------------
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# API Key authentication
+security = HTTPBearer(auto_error=False)
+
+# PII Detection engines
+if PII_DETECTION_AVAILABLE and ENABLE_PII_DETECTION:
+    analyzer = AnalyzerEngine()
+    anonymizer = AnonymizerEngine()
+else:
+    analyzer = None
+    anonymizer = None
+
+# Input validation patterns
+DANGEROUS_PATTERNS = [
+    r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>',  # Script tags
+    r'javascript:',  # JavaScript URLs
+    r'on\w+\s*=',  # Event handlers
+    r'data:text\/html',  # Data URLs
+    r'vbscript:',  # VBScript
+]
+
+def validate_and_sanitize_input(text: str) -> str:
+    """Validate and sanitize user input."""
+    if not text or len(text.strip()) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Input cannot be empty"
+        )
+    
+    if len(text) > MAX_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Input too long. Maximum {MAX_QUERY_LENGTH} characters allowed."
+        )
+    
+    # Check for dangerous patterns
+    for pattern in DANGEROUS_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            if METRICS_ENABLED:
+                BLOCKED_REQUESTS.labels(reason="dangerous_pattern").inc()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Input contains potentially dangerous content"
+            )
+    
+    # Sanitize HTML
+    sanitized = bleach.clean(text, tags=[], attributes={}, strip=True)
+    
+    # PII Detection and redaction
+    if analyzer and anonymizer and ENABLE_PII_DETECTION:
+        results = analyzer.analyze(text=sanitized, language='en')
+        if results:
+            anonymized = anonymizer.anonymize(text=sanitized, analyzer_results=results)
+            for result in results:
+                if METRICS_ENABLED:
+                    PII_DETECTIONS.labels(pii_type=result.entity_type).inc()
+            sanitized = anonymized.text
+    
+    return sanitized
+
+def verify_api_key(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> bool:
+    """Verify API key if authentication is enabled."""
+    if not ENABLE_API_KEY_AUTH:
+        return True
+    
+    if not API_KEY:
+        # If auth is enabled but no key is set, allow requests (dev mode)
+        return True
+    
+    if not credentials:
+        if METRICS_ENABLED:
+            AUTH_FAILURES.labels(reason="missing_credentials").inc()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if credentials.credentials != API_KEY:
+        if METRICS_ENABLED:
+            AUTH_FAILURES.labels(reason="invalid_api_key").inc()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return True
 
 # Initialize clients
 client = QdrantClient(url=QDRANT_URL)
@@ -200,6 +355,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Custom rate limit exception handler with metrics
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    if METRICS_ENABLED:
+        client_ip = get_remote_address(request)
+        RATE_LIMIT_EXCEEDED.labels(endpoint=request.url.path, client_ip=client_ip).inc()
+    
+    response = JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": "Rate limit exceeded",
+            "detail": f"Rate limit exceeded: {exc.detail}",
+            "retry_after": getattr(exc, 'retry_after', None)
+        }
+    )
+    return response
 
 # ---------------------------------------------------------------------------
 # Middleware for metrics collection
@@ -346,8 +522,13 @@ async def root():
     return {
         "message": "Industrial‑Audio RAG API alive",
         "version": "0.1.0",
-        "endpoints": ["/ask", "/info", "/health", "/metrics"],
-        "docs": "/docs"
+        "endpoints": ["/ask", "/info", "/health", "/metrics", "/security"],
+        "docs": "/docs",
+        "security": {
+            "authentication_required": ENABLE_API_KEY_AUTH,
+            "rate_limiting_enabled": True,
+            "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE
+        }
     }
 
 
@@ -398,27 +579,48 @@ async def metrics():
 
 
 @app.get("/ask")
+@limiter.limit(RATE_LIMIT_PER_MINUTE)
 async def ask(
-    q: str = Query(..., description="Natural-language question")
+    request: Request,
+    q: str = Query(..., description="Natural-language question"),
+    authenticated: bool = Depends(verify_api_key)
 ) -> dict[str, Any]:
     """
     Ask a natural-language question about industrial audio data.
+    
+    Requires API key authentication if enabled.
+    Rate limited to prevent abuse.
 
     Returns:
         dict: Question + generated answer with metadata
     """
     start_time = time.time()
-    answer = _rag_answer(q)
+    
+    # Validate and sanitize input
+    try:
+        sanitized_question = validate_and_sanitize_input(q)
+    except HTTPException as e:
+        # Re-raise the HTTPException with proper status code
+        raise e
+    
+    # Process the sanitized question
+    answer = _rag_answer(sanitized_question)
     processing_time = time.time() - start_time
     
     response = {
-        "question": q,
+        "question": sanitized_question,  # Return sanitized version
         "answer": answer,
         "metadata": {
             "processing_time_seconds": round(processing_time, 3),
             "collection": COLLECTION,
             "embedding_model": EMBED_MODEL,
-            "llm_model": OLLAMA_MODEL
+            "llm_model": OLLAMA_MODEL,
+            "sanitized": sanitized_question != q,  # Indicate if input was modified
+            "security": {
+                "authenticated": authenticated and ENABLE_API_KEY_AUTH,
+                "rate_limited": True,
+                "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE
+            }
         }
     }
     
@@ -429,7 +631,8 @@ async def ask(
 
 
 @app.get("/info")
-async def info() -> dict[str, Any]:
+@limiter.limit("30/minute")  # More generous rate limit for info endpoint
+async def info(request: Request) -> dict[str, Any]:
     """
     Return metadata about the current RAG setup.
 
@@ -451,5 +654,75 @@ async def info() -> dict[str, Any]:
         "search_limit": SEARCH_LIMIT,
         "metrics_enabled": METRICS_ENABLED,
         "collection_info": collection_info.dict() if hasattr(collection_info, 'dict') else collection_info,
-        "opentelemetry_available": OTEL_AVAILABLE
+        "opentelemetry_available": OTEL_AVAILABLE,
+        "security": {
+            "api_key_auth_enabled": ENABLE_API_KEY_AUTH,
+            "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE,
+            "rate_limiting_enabled": True,
+            "max_query_length": MAX_QUERY_LENGTH,
+            "rate_limit": RATE_LIMIT_PER_MINUTE
+        }
+    }
+
+
+@app.get("/security")
+@limiter.limit("10/minute")
+async def security_status(
+    request: Request,
+    authenticated: bool = Depends(verify_api_key)
+) -> dict[str, Any]:
+    """
+    Return security configuration and status.
+    Requires authentication if API key auth is enabled.
+
+    Returns:
+        dict: Security configuration and metrics
+    """
+    security_metrics = {}
+    
+    if METRICS_ENABLED:
+        # Get security-related metrics (simplified - in production you'd query Prometheus)
+        security_metrics = {
+            "rate_limit_violations": "Available via /metrics endpoint",
+            "auth_failures": "Available via /metrics endpoint", 
+            "pii_detections": "Available via /metrics endpoint",
+            "blocked_requests": "Available via /metrics endpoint"
+        }
+    
+    return {
+        "security_config": {
+            "api_key_authentication": {
+                "enabled": ENABLE_API_KEY_AUTH,
+                "configured": bool(API_KEY) if ENABLE_API_KEY_AUTH else False
+            },
+            "rate_limiting": {
+                "enabled": True,
+                "default_limit": RATE_LIMIT_PER_MINUTE,
+                "ask_endpoint_limit": RATE_LIMIT_PER_MINUTE,
+                "info_endpoint_limit": "30/minute",
+                "security_endpoint_limit": "10/minute"
+            },
+            "input_validation": {
+                "enabled": True,
+                "max_query_length": MAX_QUERY_LENGTH,
+                "html_sanitization": True,
+                "dangerous_pattern_detection": True
+            },
+            "pii_detection": {
+                "enabled": ENABLE_PII_DETECTION,
+                "available": PII_DETECTION_AVAILABLE,
+                "auto_redaction": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE
+            },
+            "monitoring": {
+                "security_metrics": METRICS_ENABLED,
+                "opentelemetry_tracing": OTEL_AVAILABLE and METRICS_ENABLED
+            }
+        },
+        "security_metrics": security_metrics,
+        "recommendations": [
+            "Enable API key authentication in production" if not ENABLE_API_KEY_AUTH else None,
+            "Configure proper CORS origins for production" if "*" in str(app.user_middleware) else None,
+            "Set up proper secrets management" if JWT_SECRET_KEY == "your-secret-key-change-in-production" else None,
+            "Monitor security metrics via /metrics endpoint" if METRICS_ENABLED else "Enable metrics for security monitoring"
+        ]
     }

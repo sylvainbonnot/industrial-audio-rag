@@ -29,7 +29,16 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "opentelemetry-instrumentation-requests",
     "opentelemetry-exporter-jaeger-thrift",
-    "opentelemetry-exporter-prometheus"
+    "opentelemetry-exporter-prometheus",
+    # Security and rate limiting
+    "slowapi",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
+    "python-multipart",
+    "pydantic[email]",
+    "bleach",
+    "presidio-analyzer",
+    "presidio-anonymizer"
 ]
 
 [project.optional-dependencies]
