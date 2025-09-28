@@ -91,7 +91,7 @@ jobs:
           python-version: '3.10'
 
       - name: 🔒 Run pip-audit security scan
-        uses: pypa/gh-action-pip-audit@v1.0.8
+        uses: pypa/gh-action-pip-audit@v1.1.0
         with:
           inputs: requirements.txt pyproject.toml
 
