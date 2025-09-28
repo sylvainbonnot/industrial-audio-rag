@@ -8,3 +8,7 @@ snapshots/
 __pycache__/
 .env
 .venv
+
+# Other
+Extra/
+Claude.md

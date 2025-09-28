@@ -1,0 +1,25 @@
+# Grafana provisioning configuration
+apiVersion: 1
+
+# Datasources configuration
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    basicAuth: false
+    jsonData:
+      httpMethod: POST
+      prometheusType: Prometheus
+      prometheusVersion: 2.40.0
+      timeInterval: 15s
+
+# Dashboards configuration  
+dashboards:
+  - name: 'industrial-audio-rag'
+    type: file
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards

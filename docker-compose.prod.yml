@@ -1,0 +1,60 @@
+# Production override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+
+version: "3.8"
+
+services:
+  api:
+    image: ghcr.io/sylvainbonnot/industrial-audio-rag:latest
+    build: null  # Don't build in production, use pre-built image
+    environment:
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  qdrant:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Production monitoring
+  prometheus:
+    profiles: []  # Always start in production
+
+  grafana:
+    profiles: []  # Always start in production
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_password
+    secrets:
+      - grafana_password
+
+secrets:
+  grafana_password:
+    external: true

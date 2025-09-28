@@ -1,16 +1,140 @@
 version: "3.8"
+
 services:
   qdrant:
     image: qdrant/qdrant:v1.8.1
     container_name: qdrant
-    ports: ["6333:6333"]
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"  # gRPC port
     volumes:
-      - ./qdrant_storage:/qdrant/storage
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - rag_network
 
   api:
-    build: .
-    command: uvicorn rag_audio.api:app --host 0.0.0.0 --port 8000
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: industrial-audio-rag:latest
+    container_name: industrial-audio-rag-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
     environment:
+      # Core configuration
       - QDRANT_URL=http://qdrant:6333
-    ports: ["8000:8000"]
-    depends_on: [qdrant]
+      - COLLECTION=${COLLECTION:-dcase24_bearing}
+      - EMBED_MODEL=${EMBED_MODEL:-mixedbread-ai/mxbai-embed-large-v1}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+      - SEARCH_LIMIT=${SEARCH_LIMIT:-6}
+      
+      # Security
+      - API_KEY=${API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-}
+      - RATE_LIMIT=${RATE_LIMIT:-10/minute}
+      
+      # Monitoring
+      - METRICS_ENABLED=${METRICS_ENABLED:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Development
+      - DEBUG=${DEBUG:-false}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - api_logs:/app/logs
+      - ./Data:/app/data:ro  # Read-only data mount
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - rag_network
+
+  # Optional: Ollama service for local LLM
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    profiles:
+      - local-llm
+    networks:
+      - rag_network
+
+  # Optional: Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+    networks:
+      - rag_network
+
+  # Optional: Grafana for dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./ops/grafana:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    profiles:
+      - monitoring
+    networks:
+      - rag_network
+
+volumes:
+  qdrant_data:
+    driver: local
+  api_logs:
+    driver: local
+  ollama_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  rag_network:
+    driver: bridge

@@ -1,0 +1,35 @@
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: "3.8"
+
+services:
+  api:
+    build:
+      target: builder  # Use builder stage for development tools
+    volumes:
+      - ./src:/app/src:ro  # Live code reload
+      - ./tests:/app/tests:ro
+      - api_logs:/app/logs
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+    command: uvicorn rag_audio.api:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+      - "8001:8001"  # Debug port
+
+  # Always include Ollama in development
+  ollama:
+    profiles: []  # Remove profile to always start
+
+  # Include monitoring stack in development
+  prometheus:
+    profiles: []
+
+  grafana:
+    profiles: []
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=dev
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
