@@ -35,7 +35,7 @@ from sentence_transformers import SentenceTransformer
 
 # OpenTelemetry imports
 try:
-    from opentelemetry import metrics, trace
+    from opentelemetry import trace
     from opentelemetry.exporter.jaeger.thrift import JaegerExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.requests import RequestsInstrumentor
@@ -200,7 +200,9 @@ if OTEL_AVAILABLE and METRICS_ENABLED:
             endpoint=JAEGER_ENDPOINT,
         )
         span_processor = BatchSpanProcessor(jaeger_exporter)
-        trace.get_tracer_provider().add_span_processor(span_processor)
+        provider = trace.get_tracer_provider()
+        assert isinstance(provider, TracerProvider)
+        provider.add_span_processor(span_processor)
 
 # ---------------------------------------------------------------------------
 # Security Setup
@@ -216,12 +218,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
 # PII Detection engines
+analyzer: Optional[Any] = None
+anonymizer: Optional[Any] = None
 if PII_DETECTION_AVAILABLE and ENABLE_PII_DETECTION:
     analyzer = AnalyzerEngine()
     anonymizer = AnonymizerEngine()
-else:
-    analyzer = None
-    anonymizer = None
 
 # Input validation patterns
 DANGEROUS_PATTERNS = [
@@ -261,7 +262,7 @@ def validate_and_sanitize_input(text: str) -> str:
     if analyzer and anonymizer and ENABLE_PII_DETECTION:
         results = analyzer.analyze(text=sanitized, language="en")
         if results:
-            anonymized = anonymizer.anonymize(text=sanitized, analyzer_results=results)
+            anonymized = anonymizer.anonymize(text=sanitized, analyzer_results=results)  # type: ignore[arg-type]
             for result in results:
                 if METRICS_ENABLED:
                     PII_DETECTIONS.labels(pii_type=result.entity_type).inc()
@@ -321,7 +322,7 @@ app.add_middleware(
 
 # Add rate limiting
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 
 # Custom rate limit exception handler with metrics
@@ -414,13 +415,11 @@ def _rag_answer(question: str) -> str:
 
     # Embedding stage
     embedding_start = time.time()
+    vec: List[float] = embedder.encode(question).tolist()
     if OTEL_AVAILABLE and METRICS_ENABLED:
         with tracer.start_as_current_span("embedding_generation") as span:
             span.set_attribute("model", EMBED_MODEL)
             span.set_attribute("question_length", len(question))
-            vec: List[float] = embedder.encode(question).tolist()
-    else:
-        vec: List[float] = embedder.encode(question).tolist()
 
     if METRICS_ENABLED:
         embedding_duration = time.time() - embedding_start
@@ -436,10 +435,14 @@ def _rag_answer(question: str) -> str:
             span.set_attribute("collection", COLLECTION)
             span.set_attribute("search_limit", SEARCH_LIMIT)
             span.set_attribute("vector_dimension", len(vec))
-            hits = client.search(collection_name=COLLECTION, query_vector=vec, limit=SEARCH_LIMIT)
+            hits = client.query_points(
+                collection_name=COLLECTION, query=vec, limit=SEARCH_LIMIT
+            ).points
             span.set_attribute("hits_found", len(hits))
     else:
-        hits = client.search(collection_name=COLLECTION, query_vector=vec, limit=SEARCH_LIMIT)
+        hits = client.query_points(
+            collection_name=COLLECTION, query=vec, limit=SEARCH_LIMIT
+        ).points
 
     if METRICS_ENABLED:
         search_duration = time.time() - search_start
@@ -574,25 +577,26 @@ async def ask(
     answer = _rag_answer(sanitized_question)
     processing_time = time.time() - start_time
 
-    response = {
-        "question": sanitized_question,  # Return sanitized version
-        "answer": answer,
-        "metadata": {
-            "processing_time_seconds": round(processing_time, 3),
-            "collection": COLLECTION,
-            "embedding_model": EMBED_MODEL,
-            "llm_model": OLLAMA_MODEL,
-            "sanitized": sanitized_question != q,  # Indicate if input was modified
-            "security": {
-                "authenticated": authenticated and ENABLE_API_KEY_AUTH,
-                "rate_limited": True,
-                "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE,
-            },
+    metadata: dict[str, Any] = {
+        "processing_time_seconds": round(processing_time, 3),
+        "collection": COLLECTION,
+        "embedding_model": EMBED_MODEL,
+        "llm_model": OLLAMA_MODEL,
+        "sanitized": sanitized_question != q,
+        "security": {
+            "authenticated": authenticated and ENABLE_API_KEY_AUTH,
+            "rate_limited": True,
+            "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE,
         },
     }
-
     if METRICS_ENABLED:
-        response["metadata"]["metrics_enabled"] = True
+        metadata["metrics_enabled"] = True
+
+    response = {
+        "question": sanitized_question,
+        "answer": answer,
+        "metadata": metadata,
+    }
 
     return response
 
@@ -606,11 +610,13 @@ async def info(request: Request) -> dict[str, Any]:
     Returns:
         dict: Info including vector count, models used, etc.
     """
+    count = 0
+    collection_info: Any = None
     try:
         count = client.count(collection_name=COLLECTION).count
-        collection_info = client.get_collection(collection_name=COLLECTION)
+        raw = client.get_collection(collection_name=COLLECTION)
+        collection_info = raw.dict() if hasattr(raw, "dict") else raw
     except Exception as e:
-        count = 0
         collection_info = {"error": str(e)}
 
     return {
@@ -620,9 +626,7 @@ async def info(request: Request) -> dict[str, Any]:
         "llm_model": OLLAMA_MODEL,
         "search_limit": SEARCH_LIMIT,
         "metrics_enabled": METRICS_ENABLED,
-        "collection_info": collection_info.dict()
-        if hasattr(collection_info, "dict")
-        else collection_info,
+        "collection_info": collection_info,
         "opentelemetry_available": OTEL_AVAILABLE,
         "security": {
             "api_key_auth_enabled": ENABLE_API_KEY_AUTH,
