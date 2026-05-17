@@ -2,7 +2,7 @@
 [![Quality Gate](https://img.shields.io/badge/Quality%20Gate-90%25-green)](eval/)
 [![Coverage](https://img.shields.io/badge/Coverage-85%25-brightgreen)]()
 [![Performance](https://img.shields.io/badge/P95%20Latency-2.1s-yellow)](eval/)
-[![Docker](https://img.shields.io/docker/pulls/ghcr.io/otosense/industrial-audio-rag)](https://github.com/otosense/industrial-audio-rag/pkgs/container/industrial-audio-rag)
+[![Docker](https://img.shields.io/docker/pulls/ghcr.io/sylvainbonnot/industrial-audio-rag)](https://github.com/sylvainbonnot/industrial-audio-rag/pkgs/container/industrial-audio-rag)
 [![Deployment](https://img.shields.io/badge/Deploy-Kubernetes-blue)](infra/)
 
 ![Industrial Audio RAG Banner](docs/images/banner.png)
@@ -19,7 +19,7 @@
 - ☁️ **Cloud Native**: Kubernetes deployment with auto-scaling
 - 📈 **Quality Assurance**: Comprehensive evaluation framework with 90% quality gate
 
-**🚀 [Try Live Demo](https://huggingface.co/spaces/otosense/industrial-audio-rag)** | **📺 [60s Demo Video](demo/DEMO_SCRIPT.md)** | **☁️ [Deploy Guide](infra/DEPLOYMENT.md)**
+**📺 [60s Demo Video](demo/DEMO_SCRIPT.md)** | **☁️ [Deploy Guide](infra/DEPLOYMENT.md)**
 
 This walkthrough shows how to turn 2 GB of **DCASE 2024 Task‑2** audio logs into an interactive Retrieval‑Augmented‑Generation (RAG) service powered by an open‑source LLM and **Qdrant** vector search.
 Along the way we will some advanced signal processing, fast batch embedding techniques, and wrap the whole thing into a production‑grade FastAPI backend, together with snapshot‑based MLOps.
@@ -157,23 +157,17 @@ Our comprehensive evaluation system measures 9 dimensions:
 
 ## 🚀 Quick Start Options
 
-### Option 1: Try the Demo (30 seconds)
-```bash
-# Visit our live HuggingFace Space
-https://huggingface.co/spaces/otosense/industrial-audio-rag
-```
-
-### Option 2: Docker Deployment (2 minutes)
+### Option 1: Docker Deployment (2 minutes)
 ```bash
 # Pull and run with docker-compose
-git clone https://github.com/otosense/industrial-audio-rag
+git clone https://github.com/sylvainbonnot/industrial-audio-rag
 cd industrial-audio-rag
 docker-compose up -d
 
 # Access at http://localhost:8000
 ```
 
-### Option 3: Cloud Deployment (10 minutes)
+### Option 2: Cloud Deployment (10 minutes)
 ```bash
 # Deploy to AWS EKS with Terraform
 cd infra/terraform
@@ -184,7 +178,7 @@ terraform init && terraform apply
 # Estimated cost: $95-600/month depending on configuration
 ```
 
-### Option 4: Development Setup (5 minutes)
+### Option 3: Development Setup (5 minutes)
 ```bash
 # Full development environment
 conda env create -f env.yml && conda activate ml_py310
@@ -378,18 +372,17 @@ This project demonstrates:
 - **AI/ML Expertise**: Vector search, embeddings, LLMs
 
 ### Get Involved
-- 🐛 **Report Issues**: [GitHub Issues](https://github.com/otosense/industrial-audio-rag/issues)
-- 💡 **Feature Requests**: [Discussions](https://github.com/otosense/industrial-audio-rag/discussions)
+- 🐛 **Report Issues**: [GitHub Issues](https://github.com/sylvainbonnot/industrial-audio-rag/issues)
+- 💡 **Feature Requests**: [Discussions](https://github.com/sylvainbonnot/industrial-audio-rag/discussions)
 - 🔀 **Pull Requests**: See [CONTRIBUTING.md](CONTRIBUTING.md)
-- 📧 **Contact**: [team@otosense.ai](mailto:team@otosense.ai)
 
 ### License & Citation
 ```bibtex
 @software{industrial_audio_rag_2024,
   title={Industrial Audio RAG: Production-Ready AI for Audio Analysis},
-  author={OtoSense Team},
+  author={Bonnot, Sylvain},
   year={2024},
-  url={https://github.com/otosense/industrial-audio-rag}
+  url={https://github.com/sylvainbonnot/industrial-audio-rag}
 }
 ```
 
