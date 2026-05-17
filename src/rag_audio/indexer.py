@@ -76,7 +76,7 @@ def safe_load(path: Path) -> tuple[torch.Tensor, int]:
 
     try:
         return torchaudio.load(str(path))
-    except RuntimeError:
+    except (RuntimeError, ImportError):
         sr, data = wavfile.read(path)
         if data.dtype in (np.int16, np.int32):
             scale = 32768.0 if data.dtype == np.int16 else 2147483648.0
