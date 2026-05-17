@@ -2,7 +2,7 @@
 [![Quality Gate](https://img.shields.io/badge/Quality%20Gate-90%25-green)](eval/)
 [![Coverage](https://img.shields.io/badge/Coverage-85%25-brightgreen)]()
 [![Performance](https://img.shields.io/badge/P95%20Latency-2.1s-yellow)](eval/)
-[![Docker](https://img.shields.io/docker/pulls/ghcr.io/sylvainbonnot/industrial-audio-rag)](https://github.com/sylvainbonnot/industrial-audio-rag/pkgs/container/industrial-audio-rag)
+[![Docker](https://img.shields.io/badge/Docker-GHCR-blue)](https://github.com/sylvainbonnot/industrial-audio-rag/pkgs/container/industrial-audio-rag)
 [![Deployment](https://img.shields.io/badge/Deploy-Kubernetes-blue)](infra/)
 
 ![Industrial Audio RAG Banner](docs/images/banner.png)
