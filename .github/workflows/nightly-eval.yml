@@ -21,15 +21,21 @@ jobs:
         image: qdrant/qdrant:v1.8.1
         ports:
           - 6333:6333
-        options: >-
-          --health-cmd "curl -f http://localhost:6333/health"
-          --health-interval 30s
-          --health-timeout 10s
-          --health-retries 5
 
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
+
+      - name: ⏳ Wait for Qdrant
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:6333/healthz; then
+              echo "Qdrant is ready"
+              break
+            fi
+            echo "Waiting for Qdrant... ($i/20)"
+            sleep 3
+          done
 
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
