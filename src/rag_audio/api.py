@@ -440,9 +440,7 @@ def _rag_answer(question: str) -> str:
             ).points
             span.set_attribute("hits_found", len(hits))
     else:
-        hits = client.query_points(
-            collection_name=COLLECTION, query=vec, limit=SEARCH_LIMIT
-        ).points
+        hits = client.query_points(collection_name=COLLECTION, query=vec, limit=SEARCH_LIMIT).points
 
     if METRICS_ENABLED:
         search_duration = time.time() - search_start
