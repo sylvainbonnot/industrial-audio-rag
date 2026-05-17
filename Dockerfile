@@ -2,7 +2,7 @@
 # Optimized for production with security hardening
 
 # Build stage - includes development tools
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
@@ -13,16 +13,16 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy package configuration
-COPY pyproject.toml ./
-COPY README.md ./
+# Copy package configuration and source
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
 
 # Install build dependencies and build wheel
 RUN pip install --no-cache-dir build && \
     python -m build
 
 # Runtime stage - minimal image for production
-FROM python:3.10-slim as runtime
+FROM python:3.10-slim AS runtime
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
