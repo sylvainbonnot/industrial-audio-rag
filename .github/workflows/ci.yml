@@ -93,7 +93,7 @@ jobs:
       - name: 🔒 Run pip-audit security scan
         uses: pypa/gh-action-pip-audit@v1.0.8
         with:
-          inputs: requirements.txt pyproject.toml
+          inputs: pyproject.toml
 
       - name: 🛡️ Run Bandit security linter
         run: |
