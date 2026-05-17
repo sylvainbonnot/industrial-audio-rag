@@ -18,53 +18,53 @@ Environment variables (with defaults):
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
-import logging
-import requests
-from typing import Any, Optional, List, Dict, Callable
+from typing import Any, List, Optional
 
+import requests
 from fastapi import FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sentence_transformers import SentenceTransformer
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import PointStruct
 
 # Monitoring imports
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from qdrant_client import QdrantClient
+from sentence_transformers import SentenceTransformer
 
 # OpenTelemetry imports
 try:
-    from opentelemetry import trace, metrics
+    from opentelemetry import metrics, trace
+    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.instrumentation.requests import RequestsInstrumentor
-    from opentelemetry.exporter.prometheus import PrometheusMetricReader
-    from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
-    logging.warning("OpenTelemetry not available. Monitoring will be limited to Prometheus metrics.")
+    logging.warning(
+        "OpenTelemetry not available. Monitoring will be limited to Prometheus metrics."
+    )
 
 # Security imports
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import HTTPException, Depends, status
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-import bleach
 import re
-from typing import Union
+
+import bleach
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from passlib.context import CryptContext
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # PII Detection imports
 try:
     from presidio_analyzer import AnalyzerEngine
     from presidio_anonymizer import AnonymizerEngine
+
     PII_DETECTION_AVAILABLE = True
 except ImportError:
     PII_DETECTION_AVAILABLE = False
@@ -121,106 +121,69 @@ MAX_QUERY_LENGTH: int = int(os.getenv("MAX_QUERY_LENGTH", "1000"))
 
 # Request metrics
 REQUEST_COUNT = Counter(
-    'api_requests_total',
-    'Total number of API requests',
-    ['method', 'endpoint', 'status']
+    "api_requests_total", "Total number of API requests", ["method", "endpoint", "status"]
 )
 
 REQUEST_DURATION = Histogram(
-    'api_request_duration_seconds',
-    'Request duration in seconds',
-    ['method', 'endpoint']
+    "api_request_duration_seconds", "Request duration in seconds", ["method", "endpoint"]
 )
 
-REQUEST_SIZE = Histogram(
-    'api_request_size_bytes',
-    'Request size in bytes',
-    ['method', 'endpoint']
-)
+REQUEST_SIZE = Histogram("api_request_size_bytes", "Request size in bytes", ["method", "endpoint"])
 
 RESPONSE_SIZE = Histogram(
-    'api_response_size_bytes',
-    'Response size in bytes',
-    ['method', 'endpoint']
+    "api_response_size_bytes", "Response size in bytes", ["method", "endpoint"]
 )
 
 # RAG-specific metrics
-RAG_QUERY_COUNT = Counter(
-    'rag_queries_total',
-    'Total number of RAG queries',
-    ['collection']
-)
+RAG_QUERY_COUNT = Counter("rag_queries_total", "Total number of RAG queries", ["collection"])
 
 RAG_QUERY_DURATION = Histogram(
-    'rag_query_duration_seconds',
-    'RAG query processing time',
-    ['collection', 'stage'],
-    buckets=(0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
+    "rag_query_duration_seconds",
+    "RAG query processing time",
+    ["collection", "stage"],
+    buckets=(0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
 )
 
 EMBEDDING_DURATION = Histogram(
-    'embedding_duration_seconds',
-    'Embedding generation time',
-    ['model'],
-    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0)
+    "embedding_duration_seconds",
+    "Embedding generation time",
+    ["model"],
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0),
 )
 
 VECTOR_SEARCH_DURATION = Histogram(
-    'vector_search_duration_seconds',
-    'Vector search time',
-    ['collection'],
-    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5)
+    "vector_search_duration_seconds",
+    "Vector search time",
+    ["collection"],
+    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5),
 )
 
 LLM_DURATION = Histogram(
-    'llm_generation_duration_seconds',
-    'LLM response generation time',
-    ['model'],
-    buckets=(0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0)
+    "llm_generation_duration_seconds",
+    "LLM response generation time",
+    ["model"],
+    buckets=(0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0),
 )
 
 # System metrics
-ACTIVE_CONNECTIONS = Gauge(
-    'active_connections',
-    'Number of active connections'
-)
+ACTIVE_CONNECTIONS = Gauge("active_connections", "Number of active connections")
 
-CACHE_HITS = Counter(
-    'cache_hits_total',
-    'Total cache hits',
-    ['cache_type']
-)
+CACHE_HITS = Counter("cache_hits_total", "Total cache hits", ["cache_type"])
 
-CACHE_MISSES = Counter(
-    'cache_misses_total', 
-    'Total cache misses',
-    ['cache_type']
-)
+CACHE_MISSES = Counter("cache_misses_total", "Total cache misses", ["cache_type"])
 
 # Security metrics
 RATE_LIMIT_EXCEEDED = Counter(
-    'rate_limit_exceeded_total',
-    'Total rate limit violations',
-    ['endpoint', 'client_ip']
+    "rate_limit_exceeded_total", "Total rate limit violations", ["endpoint", "client_ip"]
 )
 
-AUTH_FAILURES = Counter(
-    'auth_failures_total',
-    'Total authentication failures',
-    ['reason']
-)
+AUTH_FAILURES = Counter("auth_failures_total", "Total authentication failures", ["reason"])
 
 PII_DETECTIONS = Counter(
-    'pii_detections_total',
-    'Total PII detections and redactions',
-    ['pii_type']
+    "pii_detections_total", "Total PII detections and redactions", ["pii_type"]
 )
 
-BLOCKED_REQUESTS = Counter(
-    'blocked_requests_total',
-    'Total blocked requests',
-    ['reason']
-)
+BLOCKED_REQUESTS = Counter("blocked_requests_total", "Total blocked requests", ["reason"])
 
 # ---------------------------------------------------------------------------
 # OpenTelemetry Setup
@@ -230,7 +193,7 @@ if OTEL_AVAILABLE and METRICS_ENABLED:
     # Setup tracing
     trace.set_tracer_provider(TracerProvider())
     tracer = trace.get_tracer(__name__)
-    
+
     # Setup Jaeger exporter if endpoint is configured
     if JAEGER_ENDPOINT:
         jaeger_exporter = JaegerExporter(
@@ -262,27 +225,25 @@ else:
 
 # Input validation patterns
 DANGEROUS_PATTERNS = [
-    r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>',  # Script tags
-    r'javascript:',  # JavaScript URLs
-    r'on\w+\s*=',  # Event handlers
-    r'data:text\/html',  # Data URLs
-    r'vbscript:',  # VBScript
+    r"<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>",  # Script tags
+    r"javascript:",  # JavaScript URLs
+    r"on\w+\s*=",  # Event handlers
+    r"data:text\/html",  # Data URLs
+    r"vbscript:",  # VBScript
 ]
+
 
 def validate_and_sanitize_input(text: str) -> str:
     """Validate and sanitize user input."""
     if not text or len(text.strip()) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Input cannot be empty"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Input cannot be empty")
+
     if len(text) > MAX_QUERY_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Input too long. Maximum {MAX_QUERY_LENGTH} characters allowed."
+            detail=f"Input too long. Maximum {MAX_QUERY_LENGTH} characters allowed.",
         )
-    
+
     # Check for dangerous patterns
     for pattern in DANGEROUS_PATTERNS:
         if re.search(pattern, text, re.IGNORECASE):
@@ -290,33 +251,34 @@ def validate_and_sanitize_input(text: str) -> str:
                 BLOCKED_REQUESTS.labels(reason="dangerous_pattern").inc()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Input contains potentially dangerous content"
+                detail="Input contains potentially dangerous content",
             )
-    
+
     # Sanitize HTML
     sanitized = bleach.clean(text, tags=[], attributes={}, strip=True)
-    
+
     # PII Detection and redaction
     if analyzer and anonymizer and ENABLE_PII_DETECTION:
-        results = analyzer.analyze(text=sanitized, language='en')
+        results = analyzer.analyze(text=sanitized, language="en")
         if results:
             anonymized = anonymizer.anonymize(text=sanitized, analyzer_results=results)
             for result in results:
                 if METRICS_ENABLED:
                     PII_DETECTIONS.labels(pii_type=result.entity_type).inc()
             sanitized = anonymized.text
-    
+
     return sanitized
+
 
 def verify_api_key(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> bool:
     """Verify API key if authentication is enabled."""
     if not ENABLE_API_KEY_AUTH:
         return True
-    
+
     if not API_KEY:
         # If auth is enabled but no key is set, allow requests (dev mode)
         return True
-    
+
     if not credentials:
         if METRICS_ENABLED:
             AUTH_FAILURES.labels(reason="missing_credentials").inc()
@@ -325,7 +287,7 @@ def verify_api_key(credentials: Optional[HTTPAuthorizationCredentials] = Depends
             detail="API key required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     if credentials.credentials != API_KEY:
         if METRICS_ENABLED:
             AUTH_FAILURES.labels(reason="invalid_api_key").inc()
@@ -334,8 +296,9 @@ def verify_api_key(credentials: Optional[HTTPAuthorizationCredentials] = Depends
             detail="Invalid API key",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     return True
+
 
 # Initialize clients
 client = QdrantClient(url=QDRANT_URL)
@@ -344,7 +307,7 @@ embedder = SentenceTransformer(EMBED_MODEL)
 app = FastAPI(
     title="Industrial‑Audio RAG API",
     description="Query factory machine sounds with natural language",
-    version="0.1.0"
+    version="0.1.0",
 )
 
 # Add CORS middleware
@@ -360,62 +323,66 @@ app.add_middleware(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
 # Custom rate limit exception handler with metrics
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     if METRICS_ENABLED:
         client_ip = get_remote_address(request)
         RATE_LIMIT_EXCEEDED.labels(endpoint=request.url.path, client_ip=client_ip).inc()
-    
+
     response = JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         content={
             "error": "Rate limit exceeded",
             "detail": f"Rate limit exceeded: {exc.detail}",
-            "retry_after": getattr(exc, 'retry_after', None)
-        }
+            "retry_after": getattr(exc, "retry_after", None),
+        },
     )
     return response
+
 
 # ---------------------------------------------------------------------------
 # Middleware for metrics collection
 # ---------------------------------------------------------------------------
+
 
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
     """Collect metrics for all HTTP requests."""
     if not METRICS_ENABLED:
         return await call_next(request)
-    
+
     start_time = time.time()
-    
+
     # Get request size
     request_size = 0
     if hasattr(request, "headers") and "content-length" in request.headers:
         request_size = int(request.headers["content-length"])
-    
+
     # Process request
     response = await call_next(request)
-    
+
     # Calculate duration
     duration = time.time() - start_time
-    
+
     # Extract endpoint info
     method = request.method
     endpoint = request.url.path
     status = str(response.status_code)
-    
+
     # Update metrics
     REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status).inc()
     REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
     REQUEST_SIZE.labels(method=method, endpoint=endpoint).observe(request_size)
-    
+
     # Get response size if available
     if hasattr(response, "headers") and "content-length" in response.headers:
         response_size = int(response.headers["content-length"])
         RESPONSE_SIZE.labels(method=method, endpoint=endpoint).observe(response_size)
-    
+
     return response
+
 
 # ---------------------------------------------------------------------------
 # Instrument with OpenTelemetry
@@ -440,11 +407,11 @@ def _rag_answer(question: str) -> str:
         str: LLM-generated answer based on retrieved snippets
     """
     start_time = time.time()
-    
+
     # Increment query counter
     if METRICS_ENABLED:
         RAG_QUERY_COUNT.labels(collection=COLLECTION).inc()
-    
+
     # Embedding stage
     embedding_start = time.time()
     if OTEL_AVAILABLE and METRICS_ENABLED:
@@ -454,12 +421,14 @@ def _rag_answer(question: str) -> str:
             vec: List[float] = embedder.encode(question).tolist()
     else:
         vec: List[float] = embedder.encode(question).tolist()
-    
+
     if METRICS_ENABLED:
         embedding_duration = time.time() - embedding_start
         EMBEDDING_DURATION.labels(model=EMBED_MODEL).observe(embedding_duration)
-        RAG_QUERY_DURATION.labels(collection=COLLECTION, stage="embedding").observe(embedding_duration)
-    
+        RAG_QUERY_DURATION.labels(collection=COLLECTION, stage="embedding").observe(
+            embedding_duration
+        )
+
     # Vector search stage
     search_start = time.time()
     if OTEL_AVAILABLE and METRICS_ENABLED:
@@ -467,15 +436,11 @@ def _rag_answer(question: str) -> str:
             span.set_attribute("collection", COLLECTION)
             span.set_attribute("search_limit", SEARCH_LIMIT)
             span.set_attribute("vector_dimension", len(vec))
-            hits = client.search(
-                collection_name=COLLECTION, query_vector=vec, limit=SEARCH_LIMIT
-            )
+            hits = client.search(collection_name=COLLECTION, query_vector=vec, limit=SEARCH_LIMIT)
             span.set_attribute("hits_found", len(hits))
     else:
-        hits = client.search(
-            collection_name=COLLECTION, query_vector=vec, limit=SEARCH_LIMIT
-        )
-    
+        hits = client.search(collection_name=COLLECTION, query_vector=vec, limit=SEARCH_LIMIT)
+
     if METRICS_ENABLED:
         search_duration = time.time() - search_start
         VECTOR_SEARCH_DURATION.labels(collection=COLLECTION).observe(search_duration)
@@ -493,7 +458,7 @@ def _rag_answer(question: str) -> str:
         "You are an industrial‑AI assistant. Use only the sensor snippets below.\n\n"
         f"CONTEXT:\n{context}\n\nQUESTION: {question}\n"
     )
-    
+
     # LLM generation stage
     llm_start = time.time()
     if OTEL_AVAILABLE and METRICS_ENABLED:
@@ -505,14 +470,14 @@ def _rag_answer(question: str) -> str:
             span.set_attribute("answer_length", len(answer))
     else:
         answer = _llm_chat(prompt, OLLAMA_MODEL, OLLAMA_URL)
-    
+
     if METRICS_ENABLED:
         llm_duration = time.time() - llm_start
         total_duration = time.time() - start_time
         LLM_DURATION.labels(model=OLLAMA_MODEL).observe(llm_duration)
         RAG_QUERY_DURATION.labels(collection=COLLECTION, stage="llm").observe(llm_duration)
         RAG_QUERY_DURATION.labels(collection=COLLECTION, stage="total").observe(total_duration)
-    
+
     return answer
 
 
@@ -527,8 +492,8 @@ async def root():
         "security": {
             "authentication_required": ENABLE_API_KEY_AUTH,
             "rate_limiting_enabled": True,
-            "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE
-        }
+            "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE,
+        },
     }
 
 
@@ -537,22 +502,24 @@ async def health_check() -> dict[str, Any]:
     """Health check endpoint for container orchestration."""
     try:
         # Check Qdrant connection
-        qdrant_health = client.get_collections()
+        client.get_collections()
         qdrant_status = "healthy"
     except Exception as e:
         qdrant_status = f"unhealthy: {str(e)}"
-    
+
     # Check if embedding model is loaded
     try:
         embedder.encode("test")
         embedding_status = "healthy"
     except Exception as e:
         embedding_status = f"unhealthy: {str(e)}"
-    
-    overall_status = "healthy" if all(
-        status == "healthy" for status in [qdrant_status, embedding_status]
-    ) else "unhealthy"
-    
+
+    overall_status = (
+        "healthy"
+        if all(status == "healthy" for status in [qdrant_status, embedding_status])
+        else "unhealthy"
+    )
+
     return {
         "status": overall_status,
         "timestamp": time.time(),
@@ -564,8 +531,8 @@ async def health_check() -> dict[str, Any]:
             "collection": COLLECTION,
             "embedding_model": EMBED_MODEL,
             "llm_model": OLLAMA_MODEL,
-            "metrics_enabled": METRICS_ENABLED
-        }
+            "metrics_enabled": METRICS_ENABLED,
+        },
     }
 
 
@@ -574,7 +541,7 @@ async def metrics():
     """Prometheus metrics endpoint."""
     if not METRICS_ENABLED:
         return {"error": "Metrics are disabled"}
-    
+
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
@@ -583,11 +550,11 @@ async def metrics():
 async def ask(
     request: Request,
     q: str = Query(..., description="Natural-language question"),
-    authenticated: bool = Depends(verify_api_key)
+    authenticated: bool = Depends(verify_api_key),
 ) -> dict[str, Any]:
     """
     Ask a natural-language question about industrial audio data.
-    
+
     Requires API key authentication if enabled.
     Rate limited to prevent abuse.
 
@@ -595,18 +562,18 @@ async def ask(
         dict: Question + generated answer with metadata
     """
     start_time = time.time()
-    
+
     # Validate and sanitize input
     try:
         sanitized_question = validate_and_sanitize_input(q)
     except HTTPException as e:
         # Re-raise the HTTPException with proper status code
         raise e
-    
+
     # Process the sanitized question
     answer = _rag_answer(sanitized_question)
     processing_time = time.time() - start_time
-    
+
     response = {
         "question": sanitized_question,  # Return sanitized version
         "answer": answer,
@@ -619,14 +586,14 @@ async def ask(
             "security": {
                 "authenticated": authenticated and ENABLE_API_KEY_AUTH,
                 "rate_limited": True,
-                "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE
-            }
-        }
+                "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE,
+            },
+        },
     }
-    
+
     if METRICS_ENABLED:
         response["metadata"]["metrics_enabled"] = True
-    
+
     return response
 
 
@@ -645,7 +612,7 @@ async def info(request: Request) -> dict[str, Any]:
     except Exception as e:
         count = 0
         collection_info = {"error": str(e)}
-    
+
     return {
         "collection": COLLECTION,
         "vectors": count,
@@ -653,23 +620,24 @@ async def info(request: Request) -> dict[str, Any]:
         "llm_model": OLLAMA_MODEL,
         "search_limit": SEARCH_LIMIT,
         "metrics_enabled": METRICS_ENABLED,
-        "collection_info": collection_info.dict() if hasattr(collection_info, 'dict') else collection_info,
+        "collection_info": collection_info.dict()
+        if hasattr(collection_info, "dict")
+        else collection_info,
         "opentelemetry_available": OTEL_AVAILABLE,
         "security": {
             "api_key_auth_enabled": ENABLE_API_KEY_AUTH,
             "pii_detection_enabled": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE,
             "rate_limiting_enabled": True,
             "max_query_length": MAX_QUERY_LENGTH,
-            "rate_limit": RATE_LIMIT_PER_MINUTE
-        }
+            "rate_limit": RATE_LIMIT_PER_MINUTE,
+        },
     }
 
 
 @app.get("/security")
 @limiter.limit("10/minute")
 async def security_status(
-    request: Request,
-    authenticated: bool = Depends(verify_api_key)
+    request: Request, authenticated: bool = Depends(verify_api_key)
 ) -> dict[str, Any]:
     """
     Return security configuration and status.
@@ -679,50 +647,56 @@ async def security_status(
         dict: Security configuration and metrics
     """
     security_metrics = {}
-    
+
     if METRICS_ENABLED:
         # Get security-related metrics (simplified - in production you'd query Prometheus)
         security_metrics = {
             "rate_limit_violations": "Available via /metrics endpoint",
-            "auth_failures": "Available via /metrics endpoint", 
+            "auth_failures": "Available via /metrics endpoint",
             "pii_detections": "Available via /metrics endpoint",
-            "blocked_requests": "Available via /metrics endpoint"
+            "blocked_requests": "Available via /metrics endpoint",
         }
-    
+
     return {
         "security_config": {
             "api_key_authentication": {
                 "enabled": ENABLE_API_KEY_AUTH,
-                "configured": bool(API_KEY) if ENABLE_API_KEY_AUTH else False
+                "configured": bool(API_KEY) if ENABLE_API_KEY_AUTH else False,
             },
             "rate_limiting": {
                 "enabled": True,
                 "default_limit": RATE_LIMIT_PER_MINUTE,
                 "ask_endpoint_limit": RATE_LIMIT_PER_MINUTE,
                 "info_endpoint_limit": "30/minute",
-                "security_endpoint_limit": "10/minute"
+                "security_endpoint_limit": "10/minute",
             },
             "input_validation": {
                 "enabled": True,
                 "max_query_length": MAX_QUERY_LENGTH,
                 "html_sanitization": True,
-                "dangerous_pattern_detection": True
+                "dangerous_pattern_detection": True,
             },
             "pii_detection": {
                 "enabled": ENABLE_PII_DETECTION,
                 "available": PII_DETECTION_AVAILABLE,
-                "auto_redaction": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE
+                "auto_redaction": ENABLE_PII_DETECTION and PII_DETECTION_AVAILABLE,
             },
             "monitoring": {
                 "security_metrics": METRICS_ENABLED,
-                "opentelemetry_tracing": OTEL_AVAILABLE and METRICS_ENABLED
-            }
+                "opentelemetry_tracing": OTEL_AVAILABLE and METRICS_ENABLED,
+            },
         },
         "security_metrics": security_metrics,
         "recommendations": [
             "Enable API key authentication in production" if not ENABLE_API_KEY_AUTH else None,
-            "Configure proper CORS origins for production" if "*" in str(app.user_middleware) else None,
-            "Set up proper secrets management" if JWT_SECRET_KEY == "your-secret-key-change-in-production" else None,
-            "Monitor security metrics via /metrics endpoint" if METRICS_ENABLED else "Enable metrics for security monitoring"
-        ]
+            "Configure proper CORS origins for production"
+            if "*" in str(app.user_middleware)
+            else None,
+            "Set up proper secrets management"
+            if JWT_SECRET_KEY == "your-secret-key-change-in-production"
+            else None,
+            "Monitor security metrics via /metrics endpoint"
+            if METRICS_ENABLED
+            else "Enable metrics for security monitoring",
+        ],
     }

@@ -1,6 +1,4 @@
 from rag_audio.indexer import parse_filename
-from pathlib import Path
-
 
 # def test_valid_filename():
 #     name = Path("bearing_01_source_train_normal_000123.wav")

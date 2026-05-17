@@ -1,7 +1,9 @@
-from fastapi.testclient import TestClient
-from rag_audio.api import app
 import socket
+
 import pytest
+from fastapi.testclient import TestClient
+
+from rag_audio.api import app
 
 
 def is_qdrant_running(host="localhost", port=6333):

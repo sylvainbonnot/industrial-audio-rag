@@ -1,7 +1,7 @@
-from rag_audio.indexer import _process_file
-from scipy.io.wavfile import write
 import numpy as np
+from scipy.io.wavfile import write
 
+from rag_audio.indexer import _process_file
 
 # def test_process_file_structure(tmp_path):
 #     wav = tmp_path / "bearing_01_source_train_normal_000001.wav"
@@ -19,9 +19,6 @@ import numpy as np
 
 
 def test_process_file_structure(tmp_path):
-    from rag_audio.indexer import _process_file
-    from scipy.io.wavfile import write
-    import numpy as np
 
     # Create subfolder with machine type name
     subdir = tmp_path / "bearing"

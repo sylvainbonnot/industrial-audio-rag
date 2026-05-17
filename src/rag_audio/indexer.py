@@ -14,27 +14,22 @@ import json
 import logging
 import math
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
 
 import numpy as np
 import torch
 import torchaudio
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, PointStruct, VectorParams
-from sentence_transformers import SentenceTransformer
 from scipy.io import wavfile
+from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
-
 
 # ---------------------------------------------------------------------------
 # Logging & CLI
 # ---------------------------------------------------------------------------
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -46,9 +41,7 @@ def _cli() -> argparse.Namespace:
         argparse.Namespace: Parsed CLI args
     """
     p = argparse.ArgumentParser(description="Build Qdrant collection from DCASE WAVs")
-    p.add_argument(
-        "--data", type=Path, required=True, help="Root dir with extracted WAV files"
-    )
+    p.add_argument("--data", type=Path, required=True, help="Root dir with extracted WAV files")
     p.add_argument("--collection", default="dcase24_bearing")
     p.add_argument("--model", default="mixedbread-ai/mxbai-embed-large-v1")
     p.add_argument("--qdrant", default="http://localhost:6333")
@@ -193,14 +186,11 @@ def build_index(
     embedding_dim = embedder.get_sentence_embedding_dimension()
 
     if not isinstance(embedding_dim, int) or embedding_dim <= 0:
-        raise ValueError(
-            f"Model '{model}' returned invalid embedding dimension: {embedding_dim}"
-        )
+        raise ValueError(f"Model '{model}' returned invalid embedding dimension: {embedding_dim}")
 
     # Create collection if it doesn't exist
     collections = [c.name for c in client.get_collections().collections]
     if collection not in collections:
-        dim = embedder.get_sentence_embedding_dimension()
         client.recreate_collection(
             collection_name=collection,
             vectors_config=VectorParams(size=embedding_dim, distance=Distance.COSINE),
